@@ -196,9 +196,29 @@ void display_main_menu(void) {
     printf("  2. " COLOR_CYAN "Commit Management" COLOR_RESET "\n");
     printf("  3. " COLOR_CYAN "Merge Operations" COLOR_RESET "\n");
     printf("  4. " COLOR_CYAN "Remote & Push/Pull" COLOR_RESET "\n");
-    printf("  5. " COLOR_CYAN "View Status" COLOR_RESET "\n");
-    printf("  6. " COLOR_CYAN "View Log" COLOR_RESET "\n");
+    printf("  5. " COLOR_MAGENTA "History & Restore" COLOR_RESET "\n");
+    printf("  6. " COLOR_CYAN "View Status" COLOR_RESET "\n");
+    printf("  7. " COLOR_CYAN "View Log" COLOR_RESET "\n");
     printf("  0. " COLOR_RED "Exit" COLOR_RESET "\n");
+}
+
+/**
+ * Display history menu
+ */
+void display_history_menu(void) {
+    printf(COLOR_BOLD "\n=== History & Restore ===" COLOR_RESET "\n\n");
+    printf("  1. " COLOR_CYAN "View Commit History" COLOR_RESET "\n");
+    printf("  2. " COLOR_CYAN "Show Commit Details" COLOR_RESET "\n");
+    printf("  3. " COLOR_CYAN "Show Commit Diff" COLOR_RESET "\n");
+    printf("  4. " COLOR_CYAN "List Files in Commit" COLOR_RESET "\n");
+    printf("  5. " COLOR_GREEN "Restore File from Commit" COLOR_RESET "\n");
+    printf("  6. " COLOR_YELLOW "Revert Commit" COLOR_RESET " (creates undo commit)\n");
+    printf("  7. " COLOR_RED "Reset to Commit" COLOR_RESET " (dangerous!)\n");
+    printf("  8. " COLOR_MAGENTA "Cherry-pick Commit" COLOR_RESET "\n");
+    printf("  9. " COLOR_CYAN "Compare Two Commits" COLOR_RESET "\n");
+    printf(" 10. " COLOR_CYAN "View Reflog" COLOR_RESET " (recover lost commits)\n");
+    printf(" 11. " COLOR_GREEN "Recover from Reflog" COLOR_RESET "\n");
+    printf("  0. " COLOR_YELLOW "Back to Main Menu" COLOR_RESET "\n");
 }
 
 /**
@@ -826,6 +846,247 @@ void handle_remote_menu(void) {
     }
 }
 
+/**
+ * Handle history menu
+ */
+void handle_history_menu(void) {
+    int choice;
+    char *input = NULL;
+    char *input2 = NULL;
+    
+    while (g_running) {
+        clear_screen();
+        display_header();
+        
+        /* Show current branch */
+        char current[MAX_BRANCH_NAME];
+        if (get_current_branch(current, sizeof(current)) == GM_SUCCESS) {
+            printf("\nCurrent branch: " COLOR_GREEN "%s" COLOR_RESET "\n", current);
+        }
+        
+        display_history_menu();
+        choice = get_menu_choice(0, 11);
+        
+        printf("\n");
+        
+        switch (choice) {
+            case 0:
+                return;
+                
+            case 1: /* View Commit History */
+                {
+                    char *count_str = get_user_input("Number of commits to show (Enter for 20): ", 16);
+                    int count = 20;
+                    if (count_str != NULL && strlen(count_str) > 0) {
+                        count = atoi(count_str);
+                        if (count <= 0) count = 20;
+                    }
+                    if (count_str) free(count_str);
+                    
+                    show_commit_history(count, false);
+                }
+                wait_for_enter();
+                break;
+                
+            case 2: /* Show Commit Details */
+                show_commit_history(10, false);
+                input = get_user_input("Enter commit hash: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    show_commit_details(input);
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 3: /* Show Commit Diff */
+                show_commit_history(10, false);
+                input = get_user_input("Enter commit hash: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    show_commit_diff(input);
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 4: /* List Files in Commit */
+                show_commit_history(10, false);
+                input = get_user_input("Enter commit hash: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    list_commit_files(input);
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 5: /* Restore File from Commit */
+                show_commit_history(10, false);
+                input = get_user_input("Enter commit hash: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    /* Show files in that commit */
+                    list_commit_files(input);
+                    
+                    input2 = get_user_input("Enter file path to restore: ", MAX_PATH_LEN);
+                    if (input2 != NULL && strlen(input2) > 0) {
+                        if (get_user_confirmation("Restore this file?")) {
+                            restore_file_from_commit(input, input2);
+                        }
+                    }
+                    if (input2) { free(input2); input2 = NULL; }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 6: /* Revert Commit */
+                show_commit_history(10, false);
+                printf("\n" COLOR_YELLOW "Revert creates a new commit that undoes changes." COLOR_RESET "\n");
+                printf("This is the SAFE way to undo a commit.\n\n");
+                
+                input = get_user_input("Enter commit hash to revert: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    show_commit_details(input);
+                    if (get_user_confirmation("Revert this commit?")) {
+                        revert_commit(input);
+                    }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 7: /* Reset to Commit */
+                show_commit_history(10, false);
+                printf("\n" COLOR_RED "⚠ WARNING: Reset can permanently lose commits!" COLOR_RESET "\n");
+                printf("Options:\n");
+                printf("  soft  - Keep changes staged\n");
+                printf("  mixed - Keep changes unstaged (default)\n");
+                printf("  hard  - DISCARD all changes (dangerous!)\n\n");
+                
+                input = get_user_input("Enter commit hash to reset to: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    show_commit_details(input);
+                    
+                    printf(COLOR_RED "\nThis will move HEAD to commit %s\n" COLOR_RESET, input);
+                    printf("All commits after this will become orphaned!\n\n");
+                    
+                    if (get_user_confirmation("Are you SURE you want to reset?")) {
+                        input2 = get_user_input("Reset mode (soft/mixed/hard): ", 16);
+                        
+                        const char *mode = "mixed";
+                        if (input2 != NULL && strlen(input2) > 0) {
+                            if (strcmp(input2, "soft") == 0) mode = "soft";
+                            else if (strcmp(input2, "hard") == 0) {
+                                if (get_user_confirmation("FINAL WARNING: Hard reset DELETES uncommitted work!")) {
+                                    mode = "hard";
+                                } else {
+                                    mode = NULL;
+                                }
+                            }
+                        }
+                        
+                        if (mode != NULL) {
+                            reset_to_commit(input, mode);
+                        }
+                        
+                        if (input2) { free(input2); input2 = NULL; }
+                    }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 8: /* Cherry-pick Commit */
+                printf("Cherry-pick applies a specific commit to the current branch.\n\n");
+                
+                input = get_user_input("Enter commit hash or branch to view: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    /* Show commits from that ref */
+                    char cmd[MAX_COMMAND_LEN];
+                    snprintf(cmd, sizeof(cmd), "log --oneline -10 \"%s\"", input);
+                    cmd_result_t *result = exec_git_command(cmd);
+                    if (result != NULL && result->exit_code == 0 && result->output != NULL) {
+                        printf("\nRecent commits on %s:\n%s\n", input, result->output);
+                    }
+                    if (result) free_cmd_result(result);
+                }
+                if (input) { free(input); input = NULL; }
+                
+                input = get_user_input("Enter commit hash to cherry-pick: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    show_commit_details(input);
+                    if (get_user_confirmation("Cherry-pick this commit?")) {
+                        cherry_pick_commit(input);
+                    }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 9: /* Compare Two Commits */
+                show_commit_history(10, false);
+                printf("\n");
+                
+                input = get_user_input("Enter first commit hash: ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    input2 = get_user_input("Enter second commit hash: ", 64);
+                    if (input2 != NULL && strlen(input2) > 0) {
+                        compare_commits(input, input2);
+                    }
+                    if (input2) { free(input2); input2 = NULL; }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            case 10: /* View Reflog */
+                {
+                    char *count_str = get_user_input("Number of entries to show (Enter for 20): ", 16);
+                    int count = 20;
+                    if (count_str != NULL && strlen(count_str) > 0) {
+                        count = atoi(count_str);
+                        if (count <= 0) count = 20;
+                    }
+                    if (count_str) free(count_str);
+                    
+                    show_reflog(count);
+                }
+                wait_for_enter();
+                break;
+                
+            case 11: /* Recover from Reflog */
+                show_reflog(15);
+                printf("\n");
+                
+                input = get_user_input("Enter reflog reference (e.g., HEAD@{2} or hash): ", 64);
+                if (input != NULL && strlen(input) > 0) {
+                    printf("\nOptions:\n");
+                    printf("  1. Create a new branch at this point\n");
+                    printf("  2. Reset current branch to this point\n\n");
+                    
+                    int recover_choice = get_menu_choice(1, 2);
+                    
+                    if (recover_choice == 1) {
+                        input2 = get_user_input("Enter new branch name: ", MAX_BRANCH_NAME);
+                        if (input2 != NULL && strlen(input2) > 0) {
+                            recover_from_reflog(input, input2);
+                        }
+                        if (input2) { free(input2); input2 = NULL; }
+                    } else if (recover_choice == 2) {
+                        if (get_user_confirmation("Reset current branch to this point?")) {
+                            recover_from_reflog(input, NULL);
+                        }
+                    }
+                }
+                if (input) { free(input); input = NULL; }
+                wait_for_enter();
+                break;
+                
+            default:
+                PRINT_ERROR("Invalid choice");
+                wait_for_enter();
+        }
+    }
+}
+
 /* ============================================================================
  * Main Function
  * ============================================================================ */
@@ -913,7 +1174,7 @@ int main(int argc, char *argv[]) {
         }
         
         display_main_menu();
-        int choice = get_menu_choice(0, 6);
+        int choice = get_menu_choice(0, 7);
         
         switch (choice) {
             case 0:
@@ -937,12 +1198,16 @@ int main(int argc, char *argv[]) {
                 break;
                 
             case 5:
+                handle_history_menu();
+                break;
+                
+            case 6:
                 printf("\n");
                 show_status();
                 wait_for_enter();
                 break;
                 
-            case 6:
+            case 7:
                 printf("\n");
                 show_log(20);
                 wait_for_enter();

@@ -235,6 +235,27 @@ gm_error_t pull_branch(const char *remote, const char *branch);
 gm_error_t set_upstream(const char *remote, const char *branch);
 
 /* ============================================================================
+ * Function Declarations - History and Restore
+ * ============================================================================ */
+
+/* Commit history display */
+gm_error_t show_commit_history(int count, bool show_all);
+gm_error_t show_commit_details(const char *commit_hash);
+gm_error_t show_commit_diff(const char *commit_hash);
+gm_error_t list_commit_files(const char *commit_hash);
+
+/* Restore operations */
+gm_error_t restore_file_from_commit(const char *commit_hash, const char *file_path);
+gm_error_t revert_commit(const char *commit_hash);
+gm_error_t reset_to_commit(const char *commit_hash, const char *mode);
+gm_error_t cherry_pick_commit(const char *commit_hash);
+gm_error_t compare_commits(const char *commit1, const char *commit2);
+
+/* Reflog operations */
+gm_error_t show_reflog(int count);
+gm_error_t recover_from_reflog(const char *reflog_ref, const char *branch_name);
+
+/* ============================================================================
  * Function Declarations - Application State
  * ============================================================================ */
 
