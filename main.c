@@ -9,8 +9,17 @@
  */
 
 #include "git_master.h"
+#include "config.h"
 #include <signal.h>
 #include <termios.h>
+#include <fcntl.h>
+
+/* Forward declarations for daemon functions */
+extern daemon_state_t* daemon_init(config_t *config);
+extern gm_error_t daemon_start(daemon_state_t *daemon);
+extern gm_error_t daemon_stop(daemon_state_t *daemon);
+extern void daemon_cleanup(daemon_state_t *daemon);
+extern bool daemon_is_running(daemon_state_t *daemon);
 
 /* Forward declarations for functions in other files */
 extern gm_error_t show_status(void);
@@ -1101,9 +1110,112 @@ void print_usage(const char *program_name) {
     printf("  -h, --help      Show this help message\n");
     printf("  -v, --verbose   Enable verbose output\n");
     printf("  --version       Show version information\n");
+    printf("  --daemon        Run in background daemon mode (polls for remote changes)\n");
+    printf("  --daemon-fg     Run daemon in foreground (for testing)\n");
+    printf("\n");
+    printf("Daemon Mode:\n");
+    printf("  The daemon monitors your git repositories and sends desktop notifications\n");
+    printf("  when remote changes are detected. Configure in ~/.config/git_master/.git_master.conf\n");
     printf("\n");
     printf("Git Master is an interactive program for managing Git branches,\n");
     printf("commits, and merges with fault tolerance and conflict prevention.\n\n");
+}
+
+/**
+ * Run the daemon mode
+ */
+int run_daemon_mode(bool foreground) {
+    printf(COLOR_BOLD COLOR_CYAN "\n╔══════════════════════════════════════════════════════════╗\n");
+    printf("║             GIT MASTER - Daemon Mode                     ║\n");
+    printf("╚══════════════════════════════════════════════════════════╝" COLOR_RESET "\n\n");
+    
+    /* Load configuration */
+    config_t *config = config_load_or_create(NULL);
+    if (config == NULL) {
+        PRINT_ERROR("Failed to load or create configuration");
+        return 1;
+    }
+    
+    /* Show configuration */
+    printf("Configuration:\n");
+    printf("  Poll rate: %d ms\n", config->daemon.poll_rate_ms);
+    printf("  Auto-detect repos: %s\n", config->daemon.auto_detect_repos ? "yes" : "no");
+    printf("  Auto-fetch: %s\n", config->daemon.auto_fetch ? "yes" : "no");
+    printf("  Notifications: %s\n", config->notifications.enabled ? "enabled" : "disabled");
+    printf("\n");
+    
+    /* Initialize daemon */
+    daemon_state_t *daemon = daemon_init(config);
+    if (daemon == NULL) {
+        PRINT_ERROR("Failed to initialize daemon");
+        config_free(config);
+        return 1;
+    }
+    
+    /* Start daemon */
+    if (daemon_start(daemon) != GM_SUCCESS) {
+        PRINT_ERROR("Failed to start daemon");
+        daemon_cleanup(daemon);
+        config_free(config);
+        return 1;
+    }
+    
+    if (foreground) {
+        printf(COLOR_GREEN "Daemon running in foreground. Press Ctrl+C to stop.\n" COLOR_RESET);
+        printf("\nMonitoring for remote changes...\n");
+        printf("(Notifications will appear when changes are detected)\n\n");
+        
+        /* Wait for interrupt signal */
+        while (g_running && daemon_is_running(daemon)) {
+            sleep(1);
+        }
+        
+        printf("\nShutting down daemon...\n");
+    } else {
+        /* Fork to background */
+        pid_t pid = fork();
+        
+        if (pid < 0) {
+            PRINT_ERROR("Failed to fork daemon process");
+            daemon_cleanup(daemon);
+            config_free(config);
+            return 1;
+        }
+        
+        if (pid > 0) {
+            /* Parent process */
+            printf(COLOR_GREEN "Daemon started in background (PID: %d)\n" COLOR_RESET, pid);
+            printf("Use 'kill %d' or 'pkill git_master' to stop\n", pid);
+            return 0;
+        }
+        
+        /* Child process - become session leader */
+        setsid();
+        
+        /* Close standard file descriptors */
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+        
+        /* Redirect to /dev/null */
+        int null_fd = open("/dev/null", O_RDWR);
+        if (null_fd >= 0) {
+            dup2(null_fd, STDIN_FILENO);
+            dup2(null_fd, STDOUT_FILENO);
+            dup2(null_fd, STDERR_FILENO);
+            if (null_fd > 2) close(null_fd);
+        }
+        
+        /* Run forever */
+        while (g_running && daemon_is_running(daemon)) {
+            sleep(1);
+        }
+    }
+    
+    daemon_cleanup(daemon);
+    config_free(config);
+    
+    return 0;
 }
 
 /**
@@ -1111,6 +1223,8 @@ void print_usage(const char *program_name) {
  */
 int main(int argc, char *argv[]) {
     bool verbose = false;
+    bool daemon_mode = false;
+    bool daemon_foreground = false;
     
     /* Parse command line arguments */
     for (int i = 1; i < argc; i++) {
@@ -1125,6 +1239,23 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
             verbose = true;
         }
+        if (strcmp(argv[i], "--daemon") == 0) {
+            daemon_mode = true;
+            daemon_foreground = false;
+        }
+        if (strcmp(argv[i], "--daemon-fg") == 0) {
+            daemon_mode = true;
+            daemon_foreground = true;
+        }
+    }
+    
+    /* Set up signal handlers */
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+    /* Run daemon mode if requested */
+    if (daemon_mode) {
+        return run_daemon_mode(daemon_foreground);
     }
     
     /* Set up signal handlers */

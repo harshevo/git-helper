@@ -126,7 +126,8 @@ bool send_notification(const char *title, const char *message,
  * Daemon State
  * ============================================================================ */
 
-typedef struct {
+/* Define the daemon_state structure (declared as opaque pointer in config.h) */
+struct daemon_state {
     config_t *config;
     pthread_t monitor_thread;
     pthread_t watcher_thread;
@@ -135,7 +136,7 @@ typedef struct {
     char current_repo[MAX_PATH_LEN];
     int inotify_fd;
     pthread_mutex_t state_lock;
-} daemon_state_t;
+};
 
 static daemon_state_t *g_daemon = NULL;
 

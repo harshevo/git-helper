@@ -209,6 +209,13 @@ config_t* config_create(void) {
 }
 
 /**
+ * Create a configuration with defaults (alias for config_create)
+ */
+config_t* config_create_with_defaults(void) {
+    return config_create();
+}
+
+/**
  * Destroy a configuration object
  */
 void config_destroy(config_t *config) {
@@ -216,6 +223,31 @@ void config_destroy(config_t *config) {
     
     pthread_mutex_destroy(&config->lock);
     free(config);
+}
+
+/**
+ * Alias for config_destroy
+ */
+void config_free(config_t *config) {
+    config_destroy(config);
+}
+
+/**
+ * Load configuration or create if missing
+ */
+config_t* config_load_or_create(const char *path) {
+    config_t *config = config_create();
+    if (config == NULL) {
+        return NULL;
+    }
+    
+    gm_error_t err = config_load(config, path);
+    if (err != GM_SUCCESS) {
+        config_destroy(config);
+        return NULL;
+    }
+    
+    return config;
 }
 
 /**

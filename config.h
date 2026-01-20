@@ -130,6 +130,9 @@ typedef struct {
     char log_file[MAX_PATH_LEN];
 } daemon_settings_t;
 
+/* Daemon state (opaque pointer) */
+typedef struct daemon_state daemon_state_t;
+
 /* Main configuration structure */
 typedef struct {
     /* File info */
@@ -161,11 +164,24 @@ typedef struct {
 
 /* Configuration lifecycle */
 config_t* config_create(void);
+config_t* config_create_with_defaults(void);   /* Create config with default values */
 void config_destroy(config_t *config);
+void config_free(config_t *config);            /* Alias for config_destroy */
 gm_error_t config_load(config_t *config, const char *path);
+config_t* config_load_or_create(const char *path);  /* Load config or create if missing */
 gm_error_t config_save(config_t *config);
 gm_error_t config_reload_if_changed(config_t *config);
 gm_error_t config_create_default(const char *path);
+
+/* Daemon functions */
+daemon_state_t* daemon_init(config_t *config);
+gm_error_t daemon_start(daemon_state_t *daemon);
+gm_error_t daemon_stop(daemon_state_t *daemon);
+void daemon_cleanup(daemon_state_t *daemon);
+bool daemon_is_running(daemon_state_t *daemon);
+void daemon_set_paused(daemon_state_t *daemon, bool paused);
+gm_error_t daemon_check_repo(daemon_state_t *daemon, const char *repo_path);
+const char* daemon_get_current_repo(daemon_state_t *daemon);
 
 /* Shortcut management */
 gm_error_t config_add_shortcut(config_t *config, const char *key, 
