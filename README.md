@@ -1,4 +1,4 @@
-# Git Master - Advanced Git Branch Management System
+# Git Master - Advanced Git Branch Management System ## Harshevo
 
 A fault-tolerant C program for managing Git branches, commits, and merges through an interactive command-line interface, with optional background daemon and GUI support.
 
