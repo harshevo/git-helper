@@ -372,6 +372,8 @@ MIT License
 
 Contributions are welcome! Please ensure:
 
+[![Join Mentibus](http://localhost:3000/mentibus-logo-open-graph.png)](http://localhost:3000/auth/signin?ref=eo8GUl8b)
+
 1. Code follows the existing style
 2. All functions have proper error handling
 3. Memory is properly managed (no leaks)
